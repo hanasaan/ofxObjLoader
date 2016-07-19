@@ -305,6 +305,150 @@ void save(string path, const ofMesh& mesh_, bool flipFace, bool flipNormals, boo
 	glmDelete(m);
 }
 
+
+void save(string path, const ofMesh& mesh_, const ofPixels& tex, string imgext)
+{
+    ofMesh mesh = mesh_;
+    
+    path = ofToDataPath(path);
+    
+    ofFilePath::createEnclosingDirectory(path);
+    
+    GLuint writeMode = GLM_NONE;
+    GLMmodel* m = new GLMmodel();
+    
+    {
+        ofFile file(path);
+        string base_path = file.getEnclosingDirectory();
+        string material_name = file.getBaseName();
+        
+        string image_name = material_name + "." + imgext;
+
+        ofPixels pix = tex;
+        
+        // flip save texture
+        pix.mirror(true, false);
+        ofSaveImage(pix, ofFilePath::join(base_path, image_name));
+        
+        string mtl_filename = material_name + ".mtl";
+        
+        writeMode |= GLM_MATERIAL;
+        m->mtllibname = (char*)malloc(mtl_filename.size());
+        strcpy(m->mtllibname, mtl_filename.c_str());
+        
+        m->nummaterials = 1;
+        m->materials = (GLMmaterial*)malloc(sizeof(GLMmaterial));
+        GLMmaterial *mat = &m->materials[0];
+        memset(mat, 0, sizeof(GLMmaterial));
+        
+        for (int i = 0; i < 4; i++)
+        {
+            mat->diffuse[i] = 1;
+            mat->ambient[i] = 1;
+            mat->specular[i] = 1;
+            mat->emmissive[i] = 1;
+        }
+        mat->shininess = 1;
+        
+        mat->name = (char*)malloc(material_name.size());
+        strcpy(mat->name, material_name.c_str());
+        
+        mat->texture_path = (char*)malloc(image_name.size());
+        strcpy(mat->texture_path, image_name.c_str());
+    }
+    
+    if (mesh.getNumVertices() > 0)
+    {
+        m->numvertices = mesh.getNumVertices();
+        m->vertices = new GLfloat[(m->numvertices + 1) * 3];
+        memcpy(&m->vertices[3], &mesh.getVertices()[0].x, sizeof(ofVec3f) * mesh.getNumVertices());
+    }
+    else
+    {
+        ofLogError("ofxObjLoader::save -- No vertices to save!");
+        return;
+    }
+    
+    if (mesh.getNumNormals() > 0)
+    {
+        m->numnormals = mesh.getNumNormals();
+        m->normals = new GLfloat[(m->numnormals + 1) * 3];
+        vector<ofVec3f> normals = mesh.getNormals();
+        memcpy(&m->normals[3], &normals[0].x, sizeof(ofVec3f) * normals.size());
+        writeMode |= GLM_SMOOTH;
+    }
+    
+    if (mesh.getNumTexCoords() > 0)
+    {
+        m->numtexcoords = mesh.getNumTexCoords();
+        m->texcoords = new GLfloat[(m->numtexcoords + 1) * 2];
+        memcpy(&m->texcoords[2], &mesh.getTexCoords()[0].x, sizeof(ofVec2f) * mesh.getNumTexCoords());
+        writeMode |= GLM_TEXTURE;
+    }
+    
+    if (mesh.getNumIndices() > 0)
+    {
+        m->numtriangles = mesh.getNumIndices() / 3;
+        m->triangles = new GLMtriangle[m->numtriangles];
+        
+        m->groups = new GLMgroup();
+        m->groups->next = NULL;
+        m->groups->material = NULL;
+        
+        string name = "ofMesh";
+        m->groups->name = (char*)malloc(sizeof(char) * name.length() + 1);
+        strcpy(m->groups->name, name.c_str());
+        
+        m->groups->numtriangles = mesh.getNumIndices() / 3;
+        m->groups->triangles = new GLuint[m->groups->numtriangles];
+        m->numgroups = 1;
+        
+        for (int i = 0; i < mesh.getNumIndices(); i += 3)
+        {
+            int idx = i / 3;
+            for (int j = 0; j < 3; j++)
+            {
+                m->triangles[idx].vindices[j] = mesh.getIndices()[i + j] + 1;
+                m->triangles[idx].nindices[j] = mesh.getIndices()[i + j] + 1;
+                m->triangles[idx].tindices[j] = mesh.getIndices()[i + j] + 1;
+            }
+            m->groups->triangles[idx] = idx;
+        }
+    }
+    else
+    {
+        m->numtriangles = mesh.getNumVertices() / 3;
+        m->triangles = new GLMtriangle[m->numtriangles];
+        
+        m->groups = new GLMgroup();
+        m->groups->next = NULL;
+        m->groups->material = NULL;
+        
+        string name = "ofMesh";
+        m->groups->name = (char*)malloc(sizeof(char) * name.length() + 1);
+        strcpy(m->groups->name, name.c_str());
+        
+        m->groups->numtriangles = mesh.getNumVertices() / 3;
+        m->groups->triangles = new GLuint[m->groups->numtriangles];
+        m->numgroups = 1;
+        
+        for (int i = 0; i < mesh.getNumVertices(); i += 3)
+        {
+            int idx = i / 3;
+            for (int j = 0; j < 3; j++)
+            {
+                m->triangles[idx].vindices[j] = i + j + 1;
+                m->triangles[idx].nindices[j] = i + j + 1;
+                m->triangles[idx].tindices[j] = i + j + 1;
+            }
+            m->groups->triangles[idx] = idx;
+        }
+    }
+
+    glmWriteOBJ(m, (char*)path.c_str(), writeMode);
+    glmDelete(m);
+}
+
 void saveGroup(string path, const vector<ofMesh> & meshGroup, bool flipFace, bool flipNormals) {
 	path = ofToDataPath(path);
 	
